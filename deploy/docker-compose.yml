@@ -1,0 +1,136 @@
+name: powergrid-alerting
+
+services:
+  mysql:
+    image: docker.m.daocloud.io/library/mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-powergrid-root}
+      MYSQL_DATABASE: bitstorm-svr
+      TZ: Asia/Shanghai
+    # 数据库时间使用东八区
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-time-zone=+08:00
+    ports:
+      # Host 3306 is already taken by DataGrip's SSH tunnel to another data source.
+      # Publish on 3307 so GUI clients on the Mac hit this container, not the tunnel.
+      # Override with MYSQL_PUBLISH=127.0.0.1:3307 on a public host to keep it off the internet.
+      - "${MYSQL_PUBLISH:-3307}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      # 首次建库时导入消息中台表结构
+      - ../sql/msgcenter.sql:/docker-entrypoint-initdb.d/01-msgcenter-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DB_PASSWORD:-powergrid-root}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: docker.m.daocloud.io/library/redis:7-alpine
+    ports:
+      - "${REDIS_PUBLISH:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  kafka:
+    # Official Apache Kafka image (KRaft-native single node, no ZooKeeper).
+    image: docker.m.daocloud.io/apache/kafka:3.7.0
+    environment:
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      # Single-node broker: the internal topics default to replication factor 3, which can never be
+      # satisfied with one broker, so __consumer_offsets is never created and consumer groups hang on
+      # FIND_COORDINATOR (producing still works, consuming does not). Pin every internal topic to 1.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      # Skip the default 3s join delay so consumer groups rebalance immediately on a single node.
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+
+  app:
+    build:
+      context: ../..
+      dockerfile: bitstorm-svr-msgcenter/Dockerfile
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    environment:
+      # Java's TZ (used by any LocalDateTime.now()/log timestamps in the app) matches the mysql
+      # service's --default-time-zone=+08:00 above, so app logs and DB timestamps agree.
+      TZ: Asia/Shanghai
+      # Mount point when another service already owns "/" on the same host and a reverse proxy
+      # forwards a path prefix here (e.g. CONTEXT_PATH=/msgcenter). Empty = serve at the root.
+      POWERGRID_CONTEXT_PATH: ${CONTEXT_PATH:-}
+      POWERGRID_DB_URL: "jdbc:mysql://mysql:3306/bitstorm-svr?serverTimezone=GMT%2B8&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true"
+      POWERGRID_DB_USERNAME: root
+      POWERGRID_DB_PASSWORD: ${DB_PASSWORD:-powergrid-root}
+      # HikariCP pool size for the message-ingestion path. Default 10 is deliberately small; raise
+      # via DB_POOL_MAX (e.g. 50) to absorb concurrent /msg/send_msg bursts without connection-wait.
+      POWERGRID_DB_POOL_MAX: ${DB_POOL_MAX:-10}
+      POWERGRID_REDIS_HOST: redis
+      POWERGRID_REDIS_PORT: "6379"
+      # Jedis pool. Default 8 is far too small for a 100-connection ingestion burst (each
+      # /msg/send_msg does a template-cache read + rate-limit check on Redis); raise via
+      # REDIS_POOL_MAX_ACTIVE so requests don't serialize behind 8 Redis connections.
+      POWERGRID_REDIS_POOL_MAX_ACTIVE: ${REDIS_POOL_MAX_ACTIVE:-8}
+      POWERGRID_REDIS_POOL_MAX_IDLE: ${REDIS_POOL_MAX_IDLE:-8}
+      POWERGRID_KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+      # Queue backend: true = MySQL-as-queue (default, no Kafka dependency), false = Kafka.
+      # Override with MYSQL_AS_MQ=false to route the send path through Kafka topics.
+      POWERGRID_MYSQL_AS_MQ: ${MYSQL_AS_MQ:-true}
+      # Credentials for the protected legacy /msg/** API (HTTP Basic).
+      POWERGRID_OPS_USERNAME: ${OPS_USERNAME:-operator}
+      POWERGRID_OPS_PASSWORD: ${OPS_PASSWORD:-powergrid-demo}
+      # Real-carrier SMS via Tencent Cloud. Disabled unless you set these in `.env`
+      # (see deploy/.env.example) — otherwise SMSServiceImpl stays a log-only stub.
+      POWERGRID_SMS_TENCENT_ENABLED: ${SMS_TENCENT_ENABLED:-false}
+      POWERGRID_SMS_TENCENT_REGION: ${SMS_TENCENT_REGION:-ap-guangzhou}
+      POWERGRID_SMS_TENCENT_SECRET_ID: ${SMS_TENCENT_SECRET_ID:-}
+      POWERGRID_SMS_TENCENT_SECRET_KEY: ${SMS_TENCENT_SECRET_KEY:-}
+      POWERGRID_SMS_TENCENT_SDK_APP_ID: ${SMS_TENCENT_SDK_APP_ID:-}
+      POWERGRID_SMS_TENCENT_SIGN_NAME: ${SMS_TENCENT_SIGN_NAME:-}
+      POWERGRID_SMS_TENCENT_TEMPLATE_ID: ${SMS_TENCENT_TEMPLATE_ID:-}
+      # Lark/Feishu group "custom bot" webhook. Disabled unless you set these in `.env`
+      # (see deploy/.env.example) — otherwise LarkServiceImpl stays a log-only stub.
+      POWERGRID_LARK_WEBHOOK_ENABLED: ${LARK_WEBHOOK_ENABLED:-false}
+      POWERGRID_LARK_WEBHOOK_URL: ${LARK_WEBHOOK_URL:-}
+      POWERGRID_LARK_WEBHOOK_SECRET: ${LARK_WEBHOOK_SECRET:-}
+      POWERGRID_EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
+      POWERGRID_EMAIL_HOST: ${EMAIL_HOST:-smtp.163.com}
+      POWERGRID_EMAIL_PORT: ${EMAIL_PORT:-465}
+      POWERGRID_EMAIL_ACCOUNT: ${EMAIL_ACCOUNT:-}
+      POWERGRID_EMAIL_AUTH_CODE: ${EMAIL_AUTH_CODE:-}
+      # 消费侧流量治理。不设则走 application.yml 默认值；压测后把实测水位写进 .env 即可，不必重建镜像。
+      MSGCENTER_PLATFORM_QPS: ${MSGCENTER_PLATFORM_QPS:-500}
+      MSGCENTER_PLATFORM_BURST: ${MSGCENTER_PLATFORM_BURST:-1000}
+      MSGCENTER_EMAIL_QPS: ${MSGCENTER_EMAIL_QPS:-50}
+      MSGCENTER_SMS_QPS: ${MSGCENTER_SMS_QPS:-200}
+      MSGCENTER_LARK_QPS: ${MSGCENTER_LARK_QPS:-20}
+      MSGCENTER_ADMISSION_SOFT: ${MSGCENTER_ADMISSION_SOFT:-4000}
+      MSGCENTER_ADMISSION_HARD: ${MSGCENTER_ADMISSION_HARD:-12000}
+    ports:
+      - "${APP_PUBLISH:-8082}:8082"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8082${CONTEXT_PATH:-}/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+
+volumes:
+  mysql-data:
+  kafka-data:

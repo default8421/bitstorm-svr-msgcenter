@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="cn.bitoffer.msgcenter.core.mapper.MsgRecordMapper">
+    <resultMap id="msgRecordMap" type="cn.bitoffer.msgcenter.core.model.MsgRecordModel">
+        <result column="id" property="id" />
+        <result column="msg_id" property="msgId"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="to"  property="to"/>
+        <result column="subject"  property="subject"/>
+        <result column="channel"  property="channel"/>
+        <result column="source_id"  property="sourceId"/>
+        <result column="template_id"  property="templateId"/>
+        <result column="template_data"  property="templateData"/>
+        <result column="status"  property="status"/>
+        <result column="retry_count"  property="retryCount"/>
+    </resultMap>
+
+    <insert id="save" useGeneratedKeys="true" keyProperty="msgRecordModel.id">
+        insert into t_msg_record (`msg_id`,`tenant_id`,`to`,`subject`,`source_id`,`channel`,`template_id`,`template_data`,`status`,`retry_count`)
+        values (#{msgRecordModel.msgId},#{msgRecordModel.tenantId},#{msgRecordModel.to},#{msgRecordModel.subject},#{msgRecordModel.sourceId},#{msgRecordModel.channel},#{msgRecordModel.templateId},#{msgRecordModel.templateData},#{msgRecordModel.status},#{msgRecordModel.retryCount});
+    </insert>
+
+    <update id="setStatus">
+        update t_msg_record set status = #{status} where msg_id = #{msgId}
+    </update>
+
+    <!-- 原子 upsert：一条 SQL 完成“不存在则插入、存在则更新状态”，避免应用层先 SELECT 再决定
+         INSERT/UPDATE 带来的竞态窗口，也少一次网络往返。 -->
+    <insert id="upsertStatus">
+        insert into t_msg_record (`msg_id`,`tenant_id`,`to`,`subject`,`source_id`,`channel`,`template_id`,`template_data`,`status`,`retry_count`)
+        values (#{msgRecordModel.msgId},#{msgRecordModel.tenantId},#{msgRecordModel.to},#{msgRecordModel.subject},#{msgRecordModel.sourceId},#{msgRecordModel.channel},#{msgRecordModel.templateId},#{msgRecordModel.templateData},#{msgRecordModel.status},0)
+        on duplicate key update status = #{msgRecordModel.status}
+    </insert>
+
+    <update id="incrementRetryCount">
+        update t_msg_record set retry_count = #{newCount} where msg_id = #{msgId}
+    </update>
+
+    <select id="getMsgById" resultMap="msgRecordMap">
+        select * from t_msg_record where msg_id = #{msgId}
+    </select>
+
+    <!-- 最近 N 条消息记录：直接读库（不是内存），供“消息记录”页展示真实入库消息与状态流转。
+         create_time 用 DATE_FORMAT 输出为字符串，避免 Date 的时区/序列化歧义。 -->
+    <select id="recentMessages" resultType="java.util.LinkedHashMap">
+        select
+            msg_id       as msgId,
+            source_id    as sourceId,
+            channel      as channel,
+            `to`         as `to`,
+            subject      as subject,
+            status       as status,
+            date_format(create_time, '%Y-%m-%d %H:%i:%s') as createTime
+        from t_msg_record
+        where tenant_id = #{tenantId}
+        order by id desc
+        limit #{limit}
+    </select>
+
+    <select id="statusCountsSince" resultType="java.util.LinkedHashMap">
+        select status, count(*) as cnt
+        from t_msg_record
+        where tenant_id = #{tenantId} and create_time &gt;= #{since}
+        group by status
+    </select>
+
+    <select id="channelCountsSince" resultType="java.util.LinkedHashMap">
+        select channel, count(*) as cnt
+        from t_msg_record
+        where tenant_id = #{tenantId} and create_time &gt;= #{since}
+        group by channel
+    </select>
+
+    <select id="sourceCountsSince" resultType="java.util.LinkedHashMap">
+        select source_id as sourceId, count(*) as cnt
+        from t_msg_record
+        where tenant_id = #{tenantId} and create_time &gt;= #{since}
+        group by source_id
+    </select>
+
+    <select id="countAll" resultType="long">
+        select count(*) from t_msg_record where tenant_id = #{tenantId}
+    </select>
+</mapper>

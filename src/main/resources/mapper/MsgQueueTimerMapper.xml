@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="cn.bitoffer.msgcenter.core.mapper.MsgQueueTimerMapper">
+    <resultMap id="msgMap" type="cn.bitoffer.msgcenter.core.model.MsgQueueTimerModel">
+        <result column="id" property="id" />
+        <result column="msg_id" property="msgId"/>
+        <result column="req"  property="req"/>
+        <result column="send_timestamp"  property="sendTimestamp"/>
+        <result column="status"  property="status"/>
+    </resultMap>
+
+    <insert id="save" useGeneratedKeys="true" keyProperty="msgQueueTimerModel.id">
+        insert into t_msg_tmp_queue_timer (`msg_id`,`req`,`send_timestamp`,`status`)
+        values (#{msgQueueTimerModel.msgId},#{msgQueueTimerModel.req},#{msgQueueTimerModel.sendTimestamp},#{msgQueueTimerModel.status})
+    </insert>
+
+    <select id="getOnTimeMsgsList" resultMap="msgMap">
+        select * from t_msg_tmp_queue_timer where status = #{status} and send_timestamp <![CDATA[<=]]> #{nowTimestamp}
+    </select>
+
+    <update id="batchSetStatus">
+        update t_msg_tmp_queue_timer set status = #{status} where msg_id IN ${msgIdList}
+    </update>
+
+    <update id="setStatus">
+        update t_msg_tmp_queue_timer set status = #{status} where msg_id = #{msgId}
+    </update>
+
+    <select id="selectOnTimeForUpdate" resultMap="msgMap">
+        select * from t_msg_tmp_queue_timer
+        where status = #{status}
+          and send_timestamp <![CDATA[<=]]> #{nowTimestamp}
+        order by id
+        limit #{limit}
+        for update skip locked
+    </select>
+
+    <update id="claimByMsgIds">
+        update t_msg_tmp_queue_timer
+        set status = #{toStatus}
+        where msg_id in ${msgIdList} and status = #{fromStatus}
+    </update>
+
+    <update id="recoverStaleProcessing">
+        update t_msg_tmp_queue_timer
+        set status = #{toStatus}
+        where status = #{fromStatus}
+          and modify_time <![CDATA[<]]> date_sub(now(), interval #{staleSeconds} second)
+    </update>
+
+</mapper>

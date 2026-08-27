@@ -1,0 +1,1 @@
+wrk -t8 -c100 -d5s -T1s --script=get_msg_record.lua --latency  "http://localhost:8082/msg/get_msg_record?msgId=7aae3879-3436-43a0-a947-c19bedfe798f"

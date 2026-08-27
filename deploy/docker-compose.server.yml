@@ -1,0 +1,42 @@
+# Overlay for a public host that already has another reverse proxy occupying 80/443.
+# Use together with the base file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.server.yml up -d
+#
+# Keep this stack on its own Docker network so a similarly named `app` service in another
+# compose project cannot steal DNS. Publish the app on the docker-bridge gateway (see
+# APP_PUBLISH in .env.server.example) so only the on-box reverse proxy can reach it.
+#
+# Memory limits assume a small shared VM; raise them on a dedicated host.
+
+services:
+  mysql:
+    deploy:
+      resources:
+        limits:
+          memory: 900M
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-time-zone=+08:00
+      --innodb-buffer-pool-size=256M
+
+  redis:
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  kafka:
+    environment:
+      KAFKA_HEAP_OPTS: "-Xmx512m -Xms512m"
+    deploy:
+      resources:
+        limits:
+          memory: 800M
+
+  app:
+    deploy:
+      resources:
+        limits:
+          memory: 1200M

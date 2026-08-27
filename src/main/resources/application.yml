@@ -1,0 +1,179 @@
+
+server:
+  port: 8082
+  # Finish in-flight requests before the JVM exits (paired with lifecycle timeout below).
+  shutdown: graceful
+  servlet:
+    # 默认占用根路径；与其他服务同机部署时可设为 /msgcenter
+    context-path: ${POWERGRID_CONTEXT_PATH:}
+spring:
+  application:
+    name: @artifactId@
+  lifecycle:
+    # Upper bound on graceful shutdown so a stuck task cannot block the JVM forever.
+    timeout-per-shutdown-phase: ${POWERGRID_SHUTDOWN_TIMEOUT:30s}
+  servlet:
+    multipart:
+      max-file-size: ${POWERGRID_UPLOAD_MAX_FILE_SIZE:1MB}
+      max-request-size: ${POWERGRID_UPLOAD_MAX_REQUEST_SIZE:1MB}
+#  cloud:
+#    nacos:
+#      discovery:
+#        server-addr: 127.0.0.1:8848
+#        username: nacos
+#        password: nacos
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${POWERGRID_DB_URL:jdbc:mysql://127.0.0.1:3307/bitstorm-svr?serverTimezone=GMT%2B8&characterEncoding=utf8&useSSL=false}
+    username: ${POWERGRID_DB_USERNAME:root}
+    # Secret: supply POWERGRID_DB_PASSWORD via the environment; never commit real credentials.
+    password: ${POWERGRID_DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: ${POWERGRID_DB_POOL_MAX:10}
+      minimum-idle: ${POWERGRID_DB_POOL_MIN_IDLE:2}
+      connection-timeout: ${POWERGRID_DB_CONNECTION_TIMEOUT_MS:30000}
+      idle-timeout: ${POWERGRID_DB_IDLE_TIMEOUT_MS:600000}
+      max-lifetime: ${POWERGRID_DB_MAX_LIFETIME_MS:1800000}
+  flyway:
+    baseline-on-migrate: true
+    baseline-version: 0
+  redis:
+    host: ${POWERGRID_REDIS_HOST:localhost}
+    port: ${POWERGRID_REDIS_PORT:6379}
+    # Secret: supply POWERGRID_REDIS_PASSWORD via the environment.
+    password: ${POWERGRID_REDIS_PASSWORD:}
+    database: ${POWERGRID_REDIS_DATABASE:0}
+    timeout: ${POWERGRID_REDIS_TIMEOUT_MS:2000ms}
+    jedis:
+      pool:
+        max-active: ${POWERGRID_REDIS_POOL_MAX_ACTIVE:8} #最大连接数
+        max-idle: ${POWERGRID_REDIS_POOL_MAX_IDLE:8}
+        min-idle: ${POWERGRID_REDIS_POOL_MIN_IDLE:0}
+        max-wait: ${POWERGRID_REDIS_POOL_MAX_WAIT_MS:2000ms}
+  kafka:
+    #以逗号分隔的主机：端口对列表，用于建立与Kafka的连接
+    bootstrap-servers: ${POWERGRID_KAFKA_BOOTSTRAP_SERVERS:127.0.0.1:9092}
+    producer:
+      # 发生错误后，消息重发的次数。有限重试配合幂等保证不丢不重。
+      retries: ${POWERGRID_KAFKA_PRODUCER_RETRIES:3}
+      #当有多个消息需要被发送到同一个分区时，生产者会把它们放在同一个批次里。该参数指定了一个批次可以使用的内存大小，按照字节数计算。
+      batch-size: 16384
+      # 设置生产者内存缓冲区的大小。
+      buffer-memory: 33554432
+      # 键的序列化方式
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      # 值的序列化方式
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      # 所有 ISR 确认，配合幂等避免重复。
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+        delivery.timeout.ms: 120000
+    consumer:
+      # 键的反序列化方式（手动提交由 kafkaManualAckListenerContainerFactory 单独配置）
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      # 值的反序列化方式
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  #开启驼峰命名
+  configuration:
+    map-underscore-to-camel-case: false
+    # NOTE: 不要开启 StdOutImpl —— 它会把每条 SQL/参数/结果无条件同步打到 stdout，绕过日志级别，
+    # 在高并发下会严重拖慢吞吐并刷屏日志。SQL 日志改由 slf4j 按需开启（见 logging.level）。
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics
+  endpoint:
+    health:
+      show-details: never
+
+msgcenter:
+  ops:
+    username: ${MSGCENTER_OPS_USERNAME:${POWERGRID_OPS_USERNAME:operator}}
+    password: ${MSGCENTER_OPS_PASSWORD:${POWERGRID_OPS_PASSWORD:powergrid-demo}}
+  # 消费侧流量治理。入口只做过载保护，真正的发送节奏在这里控制。
+  flow-control:
+    # 中台自身的总发送速率，保护线程池、Redis 和数据库。
+    platform:
+      qps: ${MSGCENTER_PLATFORM_QPS:500}
+      burst: ${MSGCENTER_PLATFORM_BURST:1000}
+    # 渠道供应商硬限额。任何优先级都不得突破，配 0 即为该渠道停发。
+    # 数据库里配了 t_global_quota 时以数据库为准，改表即时生效，这里只是兜底。
+    # 注意用块式而不是 { } 内联映射：占位符默认值里的 } 会被 YAML 当成内联映射的结束符。
+    channels:
+      1:
+        qps: ${MSGCENTER_EMAIL_QPS:50}
+        burst: ${MSGCENTER_EMAIL_BURST:100}
+      2:
+        qps: ${MSGCENTER_SMS_QPS:200}
+        burst: ${MSGCENTER_SMS_BURST:400}
+      3:
+        qps: ${MSGCENTER_LARK_QPS:20}
+        burst: ${MSGCENTER_LARK_BURST:40}
+    # 未在 t_source_quota 中单独配置的租户走这个默认额度。
+    tenant-default:
+      qps: ${MSGCENTER_TENANT_QPS:100}
+      burst: ${MSGCENTER_TENANT_BURST:200}
+    # 优先级调度权重；低优先级保留最小份额，积压时也不会被饿死。
+    weights:
+      high: ${MSGCENTER_WEIGHT_HIGH:6}
+      middle: ${MSGCENTER_WEIGHT_MIDDLE:3}
+      low: ${MSGCENTER_WEIGHT_LOW:1}
+    scheduler:
+      capacity-per-priority: ${MSGCENTER_SCHED_CAPACITY:500}
+      worker-threads: ${MSGCENTER_SCHED_WORKERS:2}
+      # 必须小于 MysqlMsgConsumer 的 stale-processing 回收阈值（120s），否则会出现重复发送。
+      max-hold-millis: ${MSGCENTER_SCHED_MAX_HOLD_MS:60000}
+      max-park-millis: ${MSGCENTER_SCHED_MAX_PARK_MS:200}
+      idle-park-millis: ${MSGCENTER_SCHED_IDLE_PARK_MS:20}
+      fail-closed-park-millis: ${MSGCENTER_SCHED_FAIL_CLOSED_PARK_MS:1000}
+    # 入口准入水位。阈值应以改造后的容量压测结果为准，默认值只是可运行的起点。
+    admission:
+      enabled: ${MSGCENTER_ADMISSION_ENABLED:true}
+      soft-watermark: ${MSGCENTER_ADMISSION_SOFT:4000}
+      hard-watermark: ${MSGCENTER_ADMISSION_HARD:12000}
+      max-oldest-age-seconds: ${MSGCENTER_ADMISSION_MAX_AGE_S:300}
+      sample-cap: ${MSGCENTER_ADMISSION_SAMPLE_CAP:20000}
+      sample-interval-millis: ${MSGCENTER_ADMISSION_SAMPLE_INTERVAL_MS:5000}
+      retry-after-seconds: ${MSGCENTER_ADMISSION_RETRY_AFTER_S:1}
+    # 用户防打扰。默认关闭，灰度确认后再开。
+    suppression:
+      enabled: ${MSGCENTER_SUPPRESSION_ENABLED:false}
+      window-seconds: ${MSGCENTER_SUPPRESSION_WINDOW_S:60}
+      max-per-window: ${MSGCENTER_SUPPRESSION_MAX:5}
+    kafka:
+      max-wait-millis: ${MSGCENTER_KAFKA_MAX_WAIT_MS:60000}
+
+send-msg-conf:
+  mysql-as-mq : ${POWERGRID_MYSQL_AS_MQ:true}
+  open-cache: true
+  max-retry-count: ${POWERGRID_MAX_RETRY_COUNT:5}
+  # 邮件渠道：默认日志桩，打开后走真实 SMTP
+  email-enabled: ${POWERGRID_EMAIL_ENABLED:false}
+  email-host: ${POWERGRID_EMAIL_HOST:smtp.163.com}
+  email-port: ${POWERGRID_EMAIL_PORT:465}
+  # Secret: supply POWERGRID_EMAIL_ACCOUNT / POWERGRID_EMAIL_AUTH_CODE via the environment.
+  email-account: ${POWERGRID_EMAIL_ACCOUNT:}
+  email-auth-code: ${POWERGRID_EMAIL_AUTH_CODE:}
+  # 短信渠道：默认日志桩，打开后走腾讯云短信
+  sms-tencent-enabled: ${POWERGRID_SMS_TENCENT_ENABLED:false}
+  sms-tencent-region: ${POWERGRID_SMS_TENCENT_REGION:ap-guangzhou}
+  # Secret: SecretId/SecretKey come from 访问管理 (CAM) > API 密钥管理.
+  sms-tencent-secret-id: ${POWERGRID_SMS_TENCENT_SECRET_ID:}
+  sms-tencent-secret-key: ${POWERGRID_SMS_TENCENT_SECRET_KEY:}
+  # SmsSdkAppId comes from the "应用" you create in the 短信 console (format: 1400xxxxxx).
+  sms-tencent-sdk-app-id: ${POWERGRID_SMS_TENCENT_SDK_APP_ID:}
+  # SignName/TemplateId must already be approved in the 短信 console.
+  sms-tencent-sign-name: ${POWERGRID_SMS_TENCENT_SIGN_NAME:}
+  sms-tencent-template-id: ${POWERGRID_SMS_TENCENT_TEMPLATE_ID:}
+  # 飞书渠道：默认日志桩，打开后走自定义机器人 webhook
+  lark-webhook-enabled: ${POWERGRID_LARK_WEBHOOK_ENABLED:false}
+  lark-webhook-url: ${POWERGRID_LARK_WEBHOOK_URL:}
+  # Secret: only needed if the bot has "签名校验" (signature verification) turned on.
+  lark-webhook-secret: ${POWERGRID_LARK_WEBHOOK_SECRET:}

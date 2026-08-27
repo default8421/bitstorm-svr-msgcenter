@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>云擎——消息推送平台</title>
+<!-- Tabler 1.4.0: MIT-licensed, Bootstrap 5 based admin UI kit (https://github.com/tabler/tabler). Pinned for stability. -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.4.0/dist/css/tabler.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="page">
+  <!-- ===================== Sidebar ===================== -->
+  <aside class="navbar navbar-vertical navbar-expand-lg app-sidebar" data-bs-theme="dark">
+    <div class="container-fluid">
+      <button class="navbar-toggler" type="button" id="sidebarToggler" aria-label="菜单">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="navbar-brand d-flex align-items-center gap-2 py-3">
+        <span class="brand-mark"><i class="ti ti-send"></i></span>
+        <span class="brand-text">云擎——消息推送平台</span>
+      </div>
+      <div class="collapse navbar-collapse" id="sidebarMenu">
+        <ul class="navbar-nav pt-lg-2">
+          <li class="nav-item"><a class="nav-link" href="#/dashboard" data-view="dashboard">
+            <span class="nav-link-icon"><i class="ti ti-dashboard"></i></span><span class="nav-link-title">运行总览</span></a></li>
+          <li class="nav-item"><a class="nav-link" href="#/simulate" data-view="simulate">
+            <span class="nav-link-icon"><i class="ti ti-players"></i></span><span class="nav-link-title">业务模拟</span></a></li>
+          <li class="nav-item"><a class="nav-link" href="#/messages" data-view="messages">
+            <span class="nav-link-icon"><i class="ti ti-list-details"></i></span><span class="nav-link-title">消息记录</span></a></li>
+          <li class="nav-item"><a class="nav-link" href="#/templates" data-view="templates">
+            <span class="nav-link-icon"><i class="ti ti-template"></i></span><span class="nav-link-title">模板配置</span></a></li>
+          <li class="nav-item"><a class="nav-link" href="#/messaging" data-view="messaging">
+            <span class="nav-link-icon"><i class="ti ti-send"></i></span><span class="nav-link-title">发送与定时</span></a></li>
+        </ul>
+      </div>
+    </div>
+  </aside>
+
+  <div class="page-wrapper">
+    <!-- ===================== Top bar ===================== -->
+    <header class="navbar navbar-expand-md app-topbar d-print-none">
+      <div class="container-xl">
+        <div class="me-3 min-w-0">
+          <div class="page-pretitle" id="viewPretitle">Overview</div>
+          <h2 class="page-title mb-0 text-truncate" id="viewTitle">运行总览</h2>
+        </div>
+        <div class="navbar-nav flex-row order-md-last align-items-center gap-2 ms-auto">
+          <span class="status-pill" id="connBadge"><span class="status-dot"></span><span id="connText">检测中…</span></span>
+
+          <!-- Logged-out -->
+          <button class="btn btn-primary btn-sm" id="loginNavBtn"><i class="ti ti-login-2 me-1"></i>登录</button>
+
+          <!-- Logged-in -->
+          <div class="d-none align-items-center gap-2 user-box" id="userMenu">
+            <span class="avatar avatar-sm" id="userAvatar">LQ</span>
+            <span class="d-none d-md-block lh-1">
+              <span class="user-name" id="userMenuName">—</span>
+              <small class="d-block text-secondary">运营管理员</small>
+            </span>
+            <button class="btn btn-outline-secondary btn-sm" id="logoutBtn"><i class="ti ti-logout me-1"></i>退出</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="page-body">
+      <div class="container-xl">
+
+        <!-- Read-only banner (shown only when logged out) -->
+        <div class="alert d-flex align-items-center readonly-banner mb-3" id="readonlyBanner">
+          <i class="ti ti-eye me-2 fs-2 text-primary"></i>
+          <div class="flex-fill">
+            <strong>访客预览</strong>
+            <div class="text-secondary small">可自由查看总览与消息记录；发起业务模拟、管理模板、发送消息需先登录。</div>
+          </div>
+          <button class="btn btn-primary" id="readonlyLoginBtn"><i class="ti ti-login-2 me-1"></i>登录</button>
+        </div>
+
+        <!-- ============================================================= -->
+        <!-- VIEW: 运行总览 -->
+        <!-- ============================================================= -->
+        <section class="view" data-view="dashboard">
+          <div class="row row-deck row-cards mb-1">
+            <div class="col-6 col-sm-4 col-xl-2">
+              <div class="card card-sm stat-card"><div class="card-body"><div class="d-flex align-items-center">
+                <span class="stat-icon bg-blue-lt"><i class="ti ti-send"></i></span>
+                <div class="ms-2 min-w-0"><div class="stat-value" id="statToday">–</div><div class="stat-label">今日消息量</div></div>
+              </div></div></div>
+            </div>
+            <div class="col-6 col-sm-4 col-xl-2">
+              <div class="card card-sm stat-card"><div class="card-body"><div class="d-flex align-items-center">
+                <span class="stat-icon bg-green-lt"><i class="ti ti-circle-check"></i></span>
+                <div class="ms-2 min-w-0"><div class="stat-value text-green" id="statSuccessRate">–</div><div class="stat-label">送达成功率</div></div>
+              </div></div></div>
+            </div>
+            <div class="col-6 col-sm-4 col-xl-2">
+              <div class="card card-sm stat-card"><div class="card-body"><div class="d-flex align-items-center">
+                <span class="stat-icon bg-orange-lt"><i class="ti ti-clock-hour-4"></i></span>
+                <div class="ms-2 min-w-0"><div class="stat-value text-orange" id="statPending">–</div><div class="stat-label">处理中</div></div>
+              </div></div></div>
+            </div>
+            <div class="col-6 col-sm-4 col-xl-2">
+              <div class="card card-sm stat-card"><div class="card-body"><div class="d-flex align-items-center">
+                <span class="stat-icon bg-red-lt"><i class="ti ti-alert-triangle"></i></span>
+                <div class="ms-2 min-w-0"><div class="stat-value text-red" id="statFailed">–</div><div class="stat-label">失败</div></div>
+              </div></div></div>
+            </div>
+            <div class="col-6 col-sm-4 col-xl-2">
+              <div class="card card-sm stat-card"><div class="card-body"><div class="d-flex align-items-center">
+                <span class="stat-icon bg-indigo-lt"><i class="ti ti-affiliate"></i></span>
+                <div class="ms-2 min-w-0"><div class="stat-value text-indigo" id="statSources">–</div><div class="stat-label">接入业务线</div></div>
+              </div></div></div>
+            </div>
+            <div class="col-6 col-sm-4 col-xl-2">
+              <div class="card card-sm stat-card"><div class="card-body"><div class="d-flex align-items-center">
+                <span class="stat-icon bg-cyan-lt"><i class="ti ti-database"></i></span>
+                <div class="ms-2 min-w-0"><div class="stat-value text-cyan" id="statGrand">–</div><div class="stat-label">累计消息</div></div>
+              </div></div></div>
+            </div>
+          </div>
+
+          <div class="d-flex justify-content-end mb-2">
+            <button class="btn btn-outline-secondary btn-sm" id="dashRefreshBtn"><i class="ti ti-refresh me-1"></i>刷新</button>
+          </div>
+
+          <div class="row row-deck row-cards">
+            <div class="col-lg-5">
+              <div class="card h-100">
+                <div class="card-header"><h3 class="card-title"><i class="ti ti-chart-donut me-2 text-primary"></i>今日渠道分布</h3></div>
+                <div class="card-body"><div class="chart-wrap"><canvas id="channelChart"></canvas></div></div>
+              </div>
+            </div>
+            <div class="col-lg-7">
+              <div class="card h-100">
+                <div class="card-header"><h3 class="card-title"><i class="ti ti-chart-bar me-2 text-primary"></i>今日各业务线消息量</h3></div>
+                <div class="card-body"><div class="chart-wrap"><canvas id="sourceChart"></canvas></div></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================================================= -->
+        <!-- VIEW: 业务模拟 -->
+        <!-- ============================================================= -->
+        <section class="view d-none" data-view="simulate">
+          <!-- Step 1: pick a business line -->
+          <div class="card mb-3">
+            <div class="card-header">
+              <h3 class="card-title"><i class="ti ti-hand-click me-2 text-primary"></i>第一步 · 选择业务线</h3>
+              <div class="card-actions"><span class="badge bg-secondary-lt requires-auth-badge">需登录</span></div>
+            </div>
+            <div class="card-body">
+              <div class="row row-cards" id="bizLineCards"></div>
+            </div>
+          </div>
+
+          <!-- Step 2: edit fields & send one message; right side shows rendered result -->
+          <div class="row row-deck">
+            <div class="col-lg-6">
+              <div class="card h-100">
+                <div class="card-header"><h3 class="card-title"><i class="ti ti-edit me-2 text-primary"></i>第二步 · 编辑并发送</h3></div>
+                <div class="card-body">
+                  <div id="emitEmpty" class="text-secondary text-center py-5">
+                    <i class="ti ti-arrow-up fs-1 d-block mb-2 text-muted"></i>先在上方选择一条业务线
+                  </div>
+                  <form id="emitForm" class="row g-2 d-none">
+                    <div class="col-12"><div class="emit-line-info" id="emitLineInfo"></div></div>
+                    <div class="col-12">
+                      <label class="form-label">收件人</label>
+                      <input class="form-control" id="emitTo" placeholder="收件人">
+                      <span class="form-hint" id="emitToHint"></span>
+                    </div>
+                    <div class="col-12">
+                      <label class="form-label">消息内容字段</label>
+                      <div id="emitFields"></div>
+                    </div>
+                    <div class="col-12 d-flex gap-2 pt-1">
+                      <button type="button" class="btn btn-outline-secondary requires-auth" id="emitRandomBtn"><i class="ti ti-dice-3 me-1"></i>随机填充一条</button>
+                      <button type="submit" class="btn btn-primary requires-auth" id="emitSendBtn"><i class="ti ti-send me-1"></i>发送这条</button>
+                    </div>
+                    <div class="col-12"><span class="form-hint">发送后这条消息会真实经过：模板渲染 → 限流 → 入队 → 消费推送 → 落库审计。</span></div>
+                  </form>
+                </div>
+              </div>
+            </div>
+            <div class="col-lg-6">
+              <div class="card h-100">
+                <div class="card-header"><h3 class="card-title"><i class="ti ti-eye me-2 text-primary"></i>发送预览与回执</h3></div>
+                <div class="card-body">
+                  <div id="emitResult" class="text-secondary text-center py-5">
+                    <i class="ti ti-mail-fast fs-1 d-block mb-2 text-muted"></i>点击「发送这条」后，这里显示渲染后的最终报文与结果
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Optional: bulk generator to quickly populate the dashboard/records -->
+          <div class="card mt-3">
+            <div class="card-header">
+              <h3 class="card-title"><i class="ti ti-stack-2 me-2 text-secondary"></i>批量生成（可选，用于快速填充报表）</h3>
+              <div class="card-actions"><span class="badge bg-secondary-lt requires-auth-badge">需登录</span></div>
+            </div>
+            <div class="card-body">
+              <form id="simForm" class="row g-3 align-items-end">
+                <div class="col-12 col-md-4">
+                  <label class="form-label">消息条数</label>
+                  <input class="form-control" type="number" id="simCount" value="60" min="1" max="2000">
+                  <span class="form-hint">随机分配到各业务线，一键批量产生。</span>
+                </div>
+                <div class="col-12 col-md-5">
+                  <label class="form-check form-switch mt-1"><input class="form-check-input" type="checkbox" id="includeLark"><span class="form-check-label">包含少量真实飞书样例</span></label>
+                  <span class="form-hint">开启后系统告警会真实推送到飞书群（单次不超过 5 条）。</span>
+                </div>
+                <div class="col-12 col-md-3 d-grid">
+                  <button type="submit" class="btn btn-outline-primary requires-auth" id="runSimBtn"><i class="ti ti-player-play me-1"></i>批量生成</button>
+                </div>
+              </form>
+              <div class="mt-3 d-none" id="simSummaryCard">
+                <div class="text-secondary small mb-2" id="simSummaryHead"></div>
+                <div class="table-responsive">
+                  <table class="table table-vcenter card-table">
+                    <thead><tr><th>业务线</th><th>渠道</th><th class="text-end">提交</th><th class="text-end">失败</th></tr></thead>
+                    <tbody id="simSummaryBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================================================= -->
+        <!-- VIEW: 消息记录 -->
+        <!-- ============================================================= -->
+        <section class="view d-none" data-view="messages">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title"><i class="ti ti-list-details me-2 text-primary"></i>消息记录</h3>
+              <div class="card-actions"><button class="btn btn-outline-secondary btn-sm" id="refreshMsgsBtn"><i class="ti ti-refresh me-1"></i>刷新</button></div>
+            </div>
+            <div class="card-body py-2 text-secondary small">来自数据库的真实入库记录，可刷新查看状态流转（待推送 → 成功 / 失败）。</div>
+            <div class="table-responsive">
+              <table class="table table-vcenter card-table">
+                <thead><tr><th>时间</th><th>业务线</th><th>渠道</th><th>收件人</th><th>主题</th><th>状态</th></tr></thead>
+                <tbody id="msgTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================================================= -->
+        <!-- VIEW: 模板配置 -->
+        <!-- ============================================================= -->
+        <section class="view d-none" data-view="templates">
+          <div class="row">
+            <div class="col-lg-7 col-xl-6">
+              <div class="card">
+                <div class="card-header">
+                  <h3 class="card-title"><i class="ti ti-template me-2 text-primary"></i>创建消息模板</h3>
+                  <div class="card-actions"><span class="badge bg-secondary-lt requires-auth-badge">需登录</span></div>
+                </div>
+                <div class="card-body">
+                  <form id="templateForm" class="row g-2">
+                    <div class="col-7"><label class="form-label">模板名称</label><input class="form-control" id="tplName" placeholder="例如：系统通知" value="系统通知" required></div>
+                    <div class="col-5"><label class="form-label">发送渠道</label>
+                      <select class="form-select" id="tplChannel">
+                        <option value="3">飞书</option><option value="2">短信</option><option value="1">邮件</option>
+                      </select>
+                    </div>
+                    <div class="col-7"><label class="form-label">业务来源</label><input class="form-control" id="tplSourceId" placeholder="用于限流分组" value="custom-demo" required></div>
+                    <div class="col-5"><label class="form-label">主题</label><input class="form-control" id="tplSubject" placeholder="消息主题" value="系统通知"></div>
+                    <div class="col-12"><label class="form-label">内容</label>
+                      <textarea class="form-control" id="tplContent" rows="2">${event}
+${detail}</textarea>
+                    </div>
+                    <div class="col-12 d-flex gap-2 align-items-center">
+                      <button type="submit" class="btn btn-primary requires-auth" id="tplSubmitBtn"><i class="ti ti-check me-1"></i>创建并启用</button>
+                      <span class="text-secondary small" id="tplResult"></span>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+            <div class="col-lg-5 col-xl-6">
+              <div class="card h-100">
+                <div class="card-header"><h3 class="card-title"><i class="ti ti-info-circle me-2 text-primary"></i>使用说明</h3></div>
+                <div class="card-body text-secondary">
+                  <p>模板是发送的前提。创建并启用后会跳到「发送与定时」，按模板名称选中并自动带出主题和变量。</p>
+                  <ul class="mb-0">
+                    <li>内容里的 <code>${变量}</code> 会在发送时替换；没填的变量会替换成空，不会把 <code>${xxx}</code> 原文发给用户。</li>
+                    <li>选择「飞书」渠道即可通过已配置的机器人真实推送。</li>
+                    <li>「业务来源」用于限流分组，可自定义命名。查询与发送均按当前登录用户隔离。</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================================================= -->
+        <!-- VIEW: 发送与定时 -->
+        <!-- ============================================================= -->
+        <section class="view d-none" data-view="messaging">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title"><i class="ti ti-send me-2 text-primary"></i>发送 / 定时消息</h3>
+              <div class="card-actions"><span class="badge bg-secondary-lt requires-auth-badge">需登录</span></div>
+            </div>
+            <div class="card-body">
+              <form id="sendMsgForm" class="row g-2">
+                <div class="col-md-4"><label class="form-label">按模板名称筛选</label>
+                  <input class="form-control" id="msgTplFilter" placeholder="输入名称过滤，例如：邮件模板"></div>
+                <div class="col-md-5"><label class="form-label">选择模板</label>
+                  <select class="form-select" id="msgTemplateSelect" required>
+                    <option value="">请先登录后选择模板</option>
+                  </select>
+                  <span class="form-hint" id="msgTplHint">选中后会自动带出主题和模板变量，无需再手填编号。</span>
+                </div>
+                <div class="col-md-3"><label class="form-label">优先级</label>
+                  <select class="form-select" id="msgPriority">
+                    <option value="1">低</option><option value="2" selected>中</option><option value="3">高（限流也放行）</option>
+                  </select>
+                </div>
+                <input type="hidden" id="msgTemplateId" required>
+                <div class="col-md-6"><label class="form-label">收件人</label>
+                  <textarea class="form-control" id="msgTo" rows="3" placeholder="邮箱或手机号，多个用逗号 / 分号 / 换行分隔" required></textarea>
+                  <span class="form-hint" id="msgToHint">批量短信：业务侧提供名单，中台按模板逐条投递（单次最多 200 人）。</span>
+                </div>
+                <div class="col-md-6"><label class="form-label">主题</label>
+                  <input class="form-control" id="msgSubject" placeholder="选择模板后自动填入，可按需修改">
+                  <span class="form-hint">来自所选模板，切换模板会同步更新。</span>
+                </div>
+                <div class="col-12">
+                  <div class="d-flex justify-content-between align-items-center">
+                    <label class="form-label mb-0">模板变量</label>
+                    <button type="button" class="btn btn-link btn-sm p-0" id="addVarBtn"><i class="ti ti-plus"></i> 添加变量</button>
+                  </div>
+                  <div id="tplVarsContainer" class="mt-1"></div>
+                </div>
+                <div class="col-12">
+                  <label class="form-check form-switch"><input class="form-check-input" type="checkbox" id="isTimerMsg"><span class="form-check-label">定时发送（不勾选＝立即发送）</span></label>
+                </div>
+                <div class="col-md-6" id="timerTimeWrap" style="display:none"><label class="form-label">发送时间</label><input type="datetime-local" class="form-control" id="sendAt"></div>
+                <div class="col-12 d-flex gap-2 align-items-center">
+                  <button type="submit" class="btn btn-primary requires-auth" id="sendMsgBtn"><i class="ti ti-send me-1"></i>发送</button>
+                  <span class="text-secondary small" id="sendMsgResult"></span>
+                </div>
+              </form>
+              <div class="form-hint mt-2">
+                立即发送与定时发送使用同一套完整消息体；定时消息会先进入等待队列，到点后再走相同的推送链路。提交后可在「消息记录」查看状态。
+                短信批量发送由中台拆分收件人逐条入队；业务系统只需把名单交给中台，不必自己循环调短信网关。
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===================== Login overlay (pure CSS/JS, no framework dependency) ===================== -->
+<div class="login-overlay d-none" id="loginOverlay">
+  <div class="card login-card">
+    <button type="button" class="btn-close login-close" id="loginClose" aria-label="关闭"></button>
+    <div class="card-body px-4 py-4">
+      <div class="text-center mb-3">
+        <span class="brand-mark brand-mark-lg mx-auto"><i class="ti ti-send"></i></span>
+        <h2 class="h3 mt-2 mb-1">登录控制台</h2>
+        <div class="text-secondary small">登录后可发起模拟、发送消息与管理模板</div>
+      </div>
+      <form id="loginForm" autocomplete="off">
+        <div class="mb-3">
+          <label class="form-label">用户名</label>
+          <div class="input-icon"><span class="input-icon-addon"><i class="ti ti-user"></i></span>
+            <input class="form-control" id="loginUser" placeholder="用户名" autocomplete="username"></div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">密码</label>
+          <div class="input-icon"><span class="input-icon-addon"><i class="ti ti-lock"></i></span>
+            <input class="form-control" type="password" id="loginPass" placeholder="密码" autocomplete="current-password"></div>
+        </div>
+        <div class="text-danger small mb-2" id="loginError" style="min-height:1.2em"></div>
+        <div class="d-grid"><button type="submit" class="btn btn-primary" id="loginSubmit"><i class="ti ti-login-2 me-1"></i>登录</button></div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Chart.js: open-source charting library (https://github.com/chartjs/Chart.js) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

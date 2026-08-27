@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="cn.bitoffer.msgcenter.core.mapper.SourceQuotaMapper">
+    <resultMap id="quotaMap" type="cn.bitoffer.msgcenter.core.model.SourceQuotaModel">
+        <result column="id" property="id" />
+        <result column="num" property="num"/>
+        <result column="unit"  property="unit"/>
+        <result column="channel"  property="channel"/>
+        <result column="source_id"  property="sourceId"/>
+    </resultMap>
+
+    <insert id="save" useGeneratedKeys="true" keyProperty="sourceQuotaModel.id">
+        insert into t_source_quota (`num`,`unit`,`source_id`,`channel`)
+        values (#{sourceQuotaModel.num},#{sourceQuotaModel.unit},#{sourceQuotaModel.sourceId},#{sourceQuotaModel.channel});
+    </insert>
+
+    <select id="getSourceQuota" resultMap="quotaMap">
+        select * from t_source_quota where channel = #{channel} and source_id = #{sourceId}
+    </select>
+</mapper>
