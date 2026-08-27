@@ -11,7 +11,7 @@
     </parent>
 
     <artifactId>bitstorm-svr-msgcenter</artifactId>
-    <description>统一消息推送中台</description>
+    <description>云擎——消息推送平台</description>
 
     <properties>
         <java.version>17</java.version>
