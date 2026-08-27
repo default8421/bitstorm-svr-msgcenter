@@ -4,6 +4,14 @@
 
 内置四条演示业务线：账户安全、交易订单、营销触达、系统告警。渠道支持邮件、短信、飞书。
 
+## 平台演示效果
+
+![运行总览](https://github.com/default8421/bitstorm-svr-msgcenter/releases/download/screenshots/overview.png)
+
+![发送与定时](https://github.com/default8421/bitstorm-svr-msgcenter/releases/download/screenshots/messaging.png)
+
+如需学习沟通，请联系 Wechat：15803528241
+
 ## 架构
 
 采用「接入层 — 中转层 — 处理层 — 存储层」分层：
